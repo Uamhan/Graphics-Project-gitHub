@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8" />
+    <title>G00341809 Project</title>
+    <!--Style for web page-->
+    <style>* 
+    { padding: 0; margin: 0; }
+    body{box-shadow: inset 0 0 15rem rgba(78, 78, 78, 0.5);} 
+    canvas { background: rgb(0, 0, 0); display: block; margin: 0 auto;  border: 3px solid rgb(87, 87, 87); border-radius: 15px;display: block; }
+    #info  { margin: auto; width: 50%; padding: 10px;text-align: center; vertical-align: middle;font-family: Arial, "Helvetica Neue", Helvetica, sans-serif;
+    text-shadow: 0 0.05rem 0.1rem rgba(0, 0, 0, 0.5);box-shadow: none;}
+    </style>
+</head>
+<body>
+    <!--background music for webpage-->
+    <audio autoplay loop auto>  
+        <source src="audio/backgroundLoop.wav" type="audio/wav">
+        <!--audio source under creative commons attribution license -->
+        <!--https://freesound.org/people/joshuaempyre/sounds/251461/-->
+    </audio>
+<br/>
+<!--Game info displayed on web page-->
+<div id=info>
+<h1>Two Paddle Breakout</h1>
+<br/>
+<h3>Left and right keys control the bottom paddel</h3>
+<br/>
+<h3>Mouse controls the top paddle</h3>
+<br/>
+<p>Control both paddels in unison to prevent the balls from hitting the top or bottom of the screen</p>
+<p>Break all the blocks to win</p>
+
+</div>
+<br/>
+<br/>
+<!--canvas that game will be displayed on-->
+<canvas id="myCanvas" width="960" height="640"></canvas>
+<br/>
+<br/>
+<br/>
+<br/>
+<br/>
+<script>
+
+    var canvas = document.getElementById("myCanvas"); //gets canvas by id
+    var ctx = canvas.getContext("2d"); //gives canvas a 2d context
+    var rightPressed = false; // stores weather right key is pressed or not
+    var leftPressed = false; //stores weather left key is pressed or not
+    var score = 0; //contains player score
+    var lives = 3; //contains player lives
+    var paddleSpeed = 10; //speed of which the payer can move the bottom paddle
+    var r = 0; // red value for colour change function
+    var g = 0; // green value for colour change function
+    var b = 255; //blue value for colour change functuon
+    var changeAmount = 5; // amount the colours are changed per step
+    var slicesize = 0.28571428571 // 2/7 to get size of each slice of the balls
+    var rotateAmount = 0; //amount the ball rotates by
+    var ballGrow=0.05;//amount ball grows by
+    var audio = new Audio('audio/brickBreak.mp3');//background audio for game
+    var gamestate=0;// gamestate controls if menu or the game is drawn to the canvas
+
+
+    //class Ball used to define ball and draw to screen 
+    class Ball {
+        //constructor for class ball
+        constructor(ballRadius, x, y,vx,vy) {
+            this.ballRadius= ballRadius;
+            this.x = x;
+            this.y = y;
+            this.vx = vx;
+            this.vy = vy;
+        }
+        //draws ball to screen bassed on ball x,y and ballRadius
+        drawBall() {
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.ballRadius, 0, Math.PI*2);
+            ctx.fill();
+            ctx.closePath();
+            ctx.beginPath();
+            ctx.lineWidth=2.5;
+            //draws lines through the ball using Cartesian to polar coordinates
+            for (var i = 1; i <= 7; i++) {
+                    ctx.lineTo(this.x + (this.ballRadius * Math.cos((slicesize * i - rotateAmount) * Math.PI)), this.y + (this.ballRadius * Math.sin((slicesize * i - rotateAmount) * Math.PI)));
+                    ctx.lineTo(this.x, this.y);
+                }
+                ctx.stroke();
+                ctx.lineWidth=1;
+        }
+        //moves the ball
+        move(){
+            this.x += this.vx;
+            this.y += this.vy;
+        }
+    }
+    //class Paddle used to define paddle and draw to screen
+    class Paddle{
+        //constructor for class Paddle
+        constructor(pH, pW, pX,paddlePos) {
+            this.paddleHeight = pH;
+            this.paddleWidth = pW;
+            this.paddleX = pX;
+            this.paddlePos=paddlePos;
+        }
+        //draws paddle to screen bassed of paddleX,paddelHeight,paddelWidth and paddlePos
+        drawPaddle() {
+        ctx.beginPath();
+        if(this.paddlePos == "bot"){
+            ctx.rect(this.paddleX, canvas.height-this.paddleHeight, this.paddleWidth, this.paddleHeight);
+        }
+        else if(this.paddlePos =="top"){
+            ctx.rect(this.paddleX, 0, this.paddleWidth, this.paddleHeight);
+        }
+        
+        ctx.fill();
+        ctx.closePath();
+        }
+    }
+    //brick controler class draws all bricks to screen a destroys them when colision occur
+    class BrickController{
+        //brick controller constructor
+        constructor(brickRowCount, brickColumnCount, brickWidth,brickHeight,brickPadding,brickOffsetTop,brickOffsetLeft) {
+            this.brickRowCount=brickRowCount;
+            this.brickColumnCount = brickColumnCount ;
+            this.brickWidth = brickWidth ;
+            this.brickHeight = brickHeight ;
+            this.brickPadding = brickPadding;
+            this.brickOffsetTop = brickOffsetTop;
+            this.brickOffsetLeft = brickOffsetLeft;       
+            
+            this.bricks = [];
+            //fills array bricks with rows and columns
+            for(var column=0; column<this.brickColumnCount; column++) {
+                this.bricks[column] = [];
+                for(var row=0; row<this.brickRowCount; row++) {
+                    this.bricks[column][row] = { x: 0, y: 0, status: 1 };
+                    }
+            }
+
+            } 
+        //checks for collision between ball and the bricks and removes brick if colision is true
+        collisionDetection(Ball) {
+            for(var column=0;column<this.brickColumnCount; column++) {
+                for(var row=0; row<this.brickRowCount; row++) {
+                    var b = this.bricks[column][row];
+                    if(b.status == 1) {
+                     if(Ball.x > b.x && Ball.x < b.x+this.brickWidth && Ball.y > b.y && Ball.y < b.y+this.brickHeight) {
+                            Ball.vy = -Ball.vy;
+                            b.status = 0;
+                            audio.pause();
+                            audio.currentTime = 0;
+                            audio.play();
+                            score++;
+                            //if score is greate than initial brick count then all bricks have been destroyed and game is over
+                            if(score == this.brickRowCount*this.brickColumnCount) {
+                                postText="Winner";
+                                lives = 3;
+                                score = 0;
+                                gamestate=3;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        // draws array of bricks to screen
+        drawBricks() {
+            for(var column=0; column<this.brickColumnCount; column++) {
+                for(var row=0; row<this.brickRowCount; row++) {
+                    if(this.bricks[column][row].status == 1) {
+                        var brickX = (row*(this.brickWidth+this.brickPadding))+this.brickOffsetLeft;
+                        var brickY = (column*(this.brickHeight+this.brickPadding))+this.brickOffsetTop;
+                        this.bricks[column][row].x = brickX;
+                        this.bricks[column][row].y = brickY;
+                        ctx.beginPath();
+                        ctx.rect(brickX, brickY, this.brickWidth, this.brickHeight);
+                        ctx.fill();
+                        ctx.closePath();
+                    }
+                }
+            }
+        }
+
+    
+    }
+
+    //creates event listeners for keydown keyup and mouse movement
+    document.addEventListener("keydown", keyDownHandler, false);
+    document.addEventListener("keyup", keyUpHandler, false);
+    document.addEventListener("mousemove", mouseMoveHandler, false);
+    //keyCode to detect if left or right key is pressed
+    function keyDownHandler(e) {
+        if(e.keyCode == 39) {
+            rightPressed = true;
+        }
+        else if(e.keyCode == 37) {
+            leftPressed = true;
+        }
+    }
+    //keycodes to detect weather left or right key has been released
+    function keyUpHandler(e) {
+        if(e.keyCode == 39) {
+            rightPressed = false;
+        }
+        else if(e.keyCode == 37) {
+            leftPressed = false;
+        }
+    }
+    //handler that positions paddle so that it matches the x cords of mouse if mouse is within the width of canvas
+    function mouseMoveHandler(e) {
+        var relativeX = e.clientX - canvas.offsetLeft;
+        if(relativeX > 0 && relativeX < canvas.width) {
+            topPaddle.paddleX = relativeX - topPaddle.paddleWidth/2;
+        }
+    }
+    //handler that detects if the user has clicked the play text on the canvas
+    canvas.addEventListener("click", function(event) {
+        if(gamestate !=1)
+        {
+            ex = event.clientX - canvas.offsetLeft;
+            ey = event.clientY - canvas.offsetTop;
+
+            //(canvas.width / 2) -75 , (canvas.height / 2)+30)
+            if(ex > (canvas.width / 2) -75 && ex < (canvas.width / 2) +75 )
+            {
+                if(ey > (canvas.height/2)-30 && ey < (canvas.height/2)+30){
+                    
+                    gamestate = 1;
+                }
+                
+            }
+
+        }
+    })
+    
+    //draws current score on canvas
+    function drawScore() {
+        ctx.font = "18px Arial";
+        ctx.fillStyle = "white";
+        ctx.fillText("Score: "+score, 8, 20);
+    }
+    //draws current lives on canvas
+    function drawLives() {
+        ctx.font = "18px Arial";
+        ctx.fillStyle = "white";
+        ctx.fillText("Lives: "+lives, canvas.width-65, 20);
+    }
+    //detects colision for a ball
+    function ballcollision(ball){
+        //ball wall colision
+        if(ball.x + ball.vx > canvas.width-ball.ballRadius || ball.x + ball.vx < ball.ballRadius) {
+            ball.vx = -ball.vx;
+        }
+        //top paddle collision
+        if(ball.y + ball.vy < ball.ballRadius) {
+            if(ball.x > topPaddle.paddleX && ball.x < topPaddle.paddleX + topPaddle.paddleWidth) {
+                ball.vy = -ball.vy;
+                audio.pause();
+                            audio.currentTime = 0;
+                            audio.play();
+            }
+            else {
+                lives--;
+                if(!lives) {
+                    postText="Failure";
+                    lives = 3;
+                    score =0;
+                    gamestate=3;
+                }
+                else {
+                    ball.x = canvas.width/2;
+                    ball.y = 15;
+                    ball.vx = -2.5;
+                    ball.vy = 2.5;
+                    botPaddle.paddleX = (canvas.width-botPaddle.paddleWidth)/2;
+                }
+            }
+        }
+        //bot paddle collision
+        else if(ball.y + ball.vy > canvas.height-ball.ballRadius) {
+            if(ball.x > botPaddle.paddleX && ball.x < botPaddle.paddleX + botPaddle.paddleWidth) {
+                ball.vy = -ball.vy;
+                audio.pause();
+                            audio.currentTime = 0;
+                            audio.play();
+            }
+            else {
+                lives--;
+                if(!lives) {
+                    postText="Failure";
+                    lives =3;
+                    score=0;
+                    gamestate=3;
+                }
+                else {
+                    ball.x = canvas.width/2;
+                    ball.y = canvas.height-30;
+                    ball.vx = 2.5;
+                    ball.vy = -2.5;
+                    botPaddle.paddleX = (canvas.width-botPaddle.paddleWidth)/2;
+                }
+            }
+        }
+    }
+    //changes the colour each step fading from one colour to another
+    function changeColour(){
+
+        if (b == 255&&r==0)
+        {
+            g+=changeAmount;
+            if(g==255)
+            {
+                b-=changeAmount;
+            }
+        }
+        else if (r==0){
+            b-=changeAmount;
+            if (b==0)
+            {
+                r+=changeAmount;
+            }
+        }
+        else if (g==255)
+        {
+            r+=changeAmount
+            if(r==255){
+                g-=changeAmount
+            }
+        }
+        else if(b==0)
+        {
+            g-=changeAmount
+            if(g==0){
+                b+=changeAmount
+            }
+        }
+        else if (r==255){
+            b+=changeAmount
+            if(b==255)
+            {
+                r-=changeAmount;
+            }
+        }
+        else{
+            r-=changeAmount;
+        }
+        
+        ctx.fillStyle = "rgb("+r+","+g+", "+b+")";
+        
+    }
+
+    //bot ball
+    botBall = new Ball(10,(canvas.width/2),(canvas.height-30),2.5,-2.5);
+    //top ball
+    topBall = new Ball(10,(canvas.width/2),15,-2.5,2.5);
+    //bottom paddle
+    botPaddle = new Paddle(10,75,(canvas.width-75)/2,"bot");
+    //top paddle
+    topPaddle = new Paddle(10,75,(canvas.width-75)/2,"top");
+    //brick controller
+    brickController =  new BrickController(11,5,75,20,10,235,15); 
+
+    //main animation loop
+    function draw() {
+        //main menu
+        if (gamestate == 0)
+        {
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.font = "bold 36px Arial";
+            ctx.fillStyle = "white";
+            ctx.fillText("Double Break Out", (canvas.width / 2)-150 , (canvas.height / 2)-60);
+            changeColour();
+            ctx.font = "bold 76px Arial";
+            ctx.fillText("Play", (canvas.width / 2) -75 , (canvas.height / 2)+30);
+            requestAnimationFrame(draw);
+        }
+        //gameover/winner screen
+        if (gamestate == 3)
+        {
+            
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.font = "bold 76px Arial";
+            ctx.fillStyle = "white";
+            ctx.fillText(postText, (canvas.width / 2)-120 , (canvas.height / 2)-60);
+            changeColour();
+            ctx.font = "bold 76px Arial";
+            ctx.fillText("Play", (canvas.width / 2) -75 , (canvas.height / 2)+30);
+            brickController.bricks = [];
+                    for(var column=0; column<brickController.brickColumnCount; column++) {
+                        brickController.bricks[column] = [];
+                            for(var row=0; row<brickController.brickRowCount; row++) {
+                                brickController.bricks[column][row] = { x: 0, y: 0, status: 1 };
+                            }
+                        }
+            requestAnimationFrame(draw);
+        }
+        //game loop
+        if(gamestate ==1)
+        {
+            changeColour();
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            brickController.drawBricks();
+            botBall.drawBall();
+            topBall.drawBall();
+            botPaddle.drawPaddle();
+            topPaddle.drawPaddle();
+            drawScore();
+            drawLives();
+            brickController.collisionDetection(botBall);
+            brickController.collisionDetection(topBall);
+            ballcollision(botBall);
+            ballcollision(topBall);
+            //bot paddle movement
+            if(rightPressed && botPaddle.paddleX < (canvas.width-botPaddle.paddleWidth)) {
+                botPaddle.paddleX += paddleSpeed;
+            }
+            else if(leftPressed && botPaddle.paddleX > 0) {
+                botPaddle.paddleX -= paddleSpeed;
+            }
+
+            botBall.move();
+            topBall.move();
+            rotateAmount+=0.25;
+            //ball grows and shrinks each step
+            botBall.ballRadius+=ballGrow;
+            if (botBall.ballRadius <10){
+                ballGrow=ballGrow*-1;
+            }
+            if (botBall.ballRadius>15){
+                ballGrow=ballGrow*-1;
+            }
+            topBall.ballRadius+=ballGrow;
+            if (topBall.ballRadius <10){
+                ballGrow=ballGrow*-1;
+            }
+            if (topBall.ballRadius>15){
+                ballGrow=ballGrow*-1;
+            }
+            
+            requestAnimationFrame(draw);
+        }
+    }
+    draw();
+</script>
+
+</body>
+</html>
